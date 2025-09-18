@@ -24,13 +24,18 @@ export function hasPermission(
   permission: Permission,
   context: PermissionContext
 ): boolean {
-  const { user } = context
+  const { user, userRole } = context
 
   if (!user) {
     return false
   }
 
-  // User role permissions
+  // If we have a specific userRole for this trip, use trip-specific permissions
+  if (userRole) {
+    return hasTripSpecificPermission(permission, context)
+  }
+
+  // Otherwise, use general user role permissions
   switch (user.role) {
     case 'User':
       return hasUserPermission(permission, context)
@@ -158,8 +163,8 @@ export function getUserRoleInTrip(user: User, trip: Trip): TripUserRole | undefi
     return 'Owner'
   }
   
-  // In a real app, you would check the tripAccess collection here
-  // For now, we'll use the userRole from the trip object
+  // Use the userRole from the trip object if it's set
+  // This should be set when the trip is loaded with access information
   return trip.userRole
 }
 

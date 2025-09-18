@@ -73,15 +73,19 @@ export const tripsService = {
     }
   },
 
-  async getTrip(tripId: string, userEmail?: string): Promise<Trip | null> {
+  async getTrip(tripId: string, userEmail?: string, userId?: string): Promise<Trip | null> {
     try {
       const docRef = doc(db, 'trips', tripId)
       const docSnap = await getDoc(docRef)
       if (docSnap.exists()) {
         const tripData = { id: docSnap.id, ...docSnap.data() } as Trip
         
+        // Check if user is the owner
+        if (userId && tripData.ownerId === userId) {
+          tripData.userRole = 'Owner'
+        }
         // If userEmail is provided, check if user is a collaborator
-        if (userEmail) {
+        else if (userEmail) {
           const accessQuery = query(
             collection(db, 'tripAccess'),
             where('tripId', '==', tripId),
@@ -199,47 +203,67 @@ export const tripsService = {
     }
   },
 
-  async createPlace(place: Omit<Place, 'id' | 'createdAt' | 'updatedAt'>): Promise<string | null> {
+  async createPlace(place: Omit<Place, 'id' | 'createdAt' | 'updatedAt'>, userId: string, userEmail?: string): Promise<string | null> {
     try {
-      // Фільтруємо undefined значення
-      const cleanPlace = Object.fromEntries(
-        Object.entries(place).filter(([_, value]) => value !== undefined && value !== null)
-      )
+      // Check if user has access to the trip
+      const tripDoc = await getDoc(doc(db, 'trips', place.tripId))
+      if (!tripDoc.exists()) {
+        console.error('Trip not found')
+        return null
+      }
       
-      const docRef = await addDoc(collection(db, 'places'), {
-        ...cleanPlace,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      })
-      return docRef.id
+      const tripData = tripDoc.data() as Trip
+      
+      // Check if user is the owner of the trip
+      if (tripData.ownerId === userId) {
+        // Фільтруємо undefined значення
+        const cleanPlace = Object.fromEntries(
+          Object.entries(place).filter(([_, value]) => value !== undefined && value !== null)
+        )
+        
+        const docRef = await addDoc(collection(db, 'places'), {
+          ...cleanPlace,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+        return docRef.id
+      }
+      
+      // Check if user is a collaborator (if userEmail is provided)
+      if (userEmail) {
+        const accessQuery = query(
+          collection(db, 'tripAccess'),
+          where('tripId', '==', place.tripId),
+          where('email', '==', userEmail),
+          where('status', '==', 'accepted')
+        )
+        const accessSnapshot = await getDocs(accessQuery)
+        if (!accessSnapshot.empty) {
+          // Фільтруємо undefined значення
+          const cleanPlace = Object.fromEntries(
+            Object.entries(place).filter(([_, value]) => value !== undefined && value !== null)
+          )
+          
+          const docRef = await addDoc(collection(db, 'places'), {
+            ...cleanPlace,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          })
+          return docRef.id
+        }
+      }
+      
+      console.error('User does not have permission to create places in this trip')
+      return null
     } catch (error) {
       console.error('Error creating place:', error)
       return null
     }
   },
 
-  async updatePlace(placeId: string, updates: Partial<Place>): Promise<boolean> {
+  async updatePlace(placeId: string, updates: Partial<Place>, userId: string, userEmail?: string): Promise<boolean> {
     try {
-      // Фільтруємо undefined значення
-      const cleanUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, value]) => value !== undefined && value !== null)
-      )
-      
-      const docRef = doc(db, 'places', placeId)
-      await updateDoc(docRef, {
-        ...cleanUpdates,
-        updatedAt: serverTimestamp()
-      })
-      return true
-    } catch (error) {
-      console.error('Error updating place:', error)
-      return false
-    }
-  },
-
-  async deletePlace(placeId: string, userId: string): Promise<boolean> {
-    try {
-      // Check if user is the owner of the trip that contains this place
+      // Check if place exists
       const placeDoc = await getDoc(doc(db, 'places', placeId))
       if (!placeDoc.exists()) {
         console.error('Place not found')
@@ -254,13 +278,95 @@ export const tripsService = {
       }
       
       const tripData = tripDoc.data() as Trip
-      if (tripData.ownerId !== userId) {
-        console.error('User is not the owner of this trip')
+      
+      // Check if user is the owner of the trip
+      if (tripData.ownerId === userId) {
+        // Фільтруємо undefined значення
+        const cleanUpdates = Object.fromEntries(
+          Object.entries(updates).filter(([_, value]) => value !== undefined && value !== null)
+        )
+        
+        const docRef = doc(db, 'places', placeId)
+        await updateDoc(docRef, {
+          ...cleanUpdates,
+          updatedAt: serverTimestamp()
+        })
+        return true
+      }
+      
+      // Check if user is a collaborator (if userEmail is provided)
+      if (userEmail) {
+        const accessQuery = query(
+          collection(db, 'tripAccess'),
+          where('tripId', '==', placeData.tripId),
+          where('email', '==', userEmail),
+          where('status', '==', 'accepted')
+        )
+        const accessSnapshot = await getDocs(accessQuery)
+        if (!accessSnapshot.empty) {
+          // Фільтруємо undefined значення
+          const cleanUpdates = Object.fromEntries(
+            Object.entries(updates).filter(([_, value]) => value !== undefined && value !== null)
+          )
+          
+          const docRef = doc(db, 'places', placeId)
+          await updateDoc(docRef, {
+            ...cleanUpdates,
+            updatedAt: serverTimestamp()
+          })
+          return true
+        }
+      }
+      
+      console.error('User does not have permission to update this place')
+      return false
+    } catch (error) {
+      console.error('Error updating place:', error)
+      return false
+    }
+  },
+
+  async deletePlace(placeId: string, userId: string, userEmail?: string): Promise<boolean> {
+    try {
+      // Check if place exists
+      const placeDoc = await getDoc(doc(db, 'places', placeId))
+      if (!placeDoc.exists()) {
+        console.error('Place not found')
         return false
       }
       
-      await deleteDoc(doc(db, 'places', placeId))
-      return true
+      const placeData = placeDoc.data() as Place
+      const tripDoc = await getDoc(doc(db, 'trips', placeData.tripId))
+      if (!tripDoc.exists()) {
+        console.error('Trip not found')
+        return false
+      }
+      
+      const tripData = tripDoc.data() as Trip
+      
+      // Check if user is the owner of the trip
+      if (tripData.ownerId === userId) {
+        await deleteDoc(doc(db, 'places', placeId))
+        return true
+      }
+      
+      // Check if user is a collaborator (if userEmail is provided)
+      if (userEmail) {
+        const accessQuery = query(
+          collection(db, 'tripAccess'),
+          where('tripId', '==', placeData.tripId),
+          where('email', '==', userEmail),
+          where('status', '==', 'accepted')
+        )
+        const accessSnapshot = await getDocs(accessQuery)
+        if (!accessSnapshot.empty) {
+          await deleteDoc(doc(db, 'places', placeId))
+          return true
+        }
+      }
+      
+      console.error('User does not have permission to delete this place')
+      return false
     } catch (error) {
       console.error('Error deleting place:', error)
       return false

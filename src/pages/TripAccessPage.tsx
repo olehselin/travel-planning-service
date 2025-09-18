@@ -36,7 +36,7 @@ export const TripAccessPage: React.FC = () => {
     if (!id) return
     
     setIsLoading(true)
-    const trip = await tripsService.getTrip(id)
+    const trip = await tripsService.getTrip(id, user?.email, user?.uid)
     if (trip) {
       setCurrentTrip(trip)
       const access = await tripsService.getTripAccess(id)

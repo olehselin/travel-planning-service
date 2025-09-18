@@ -17,7 +17,7 @@ import {
   Users
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { Trip, TripUserRole } from '@/types'
+import { Trip, TripUserRole, Place } from '@/types'
 
 // Допоміжна функція для безпечного форматування дат
 const safeFormatDate = (dateString: string | undefined, fallback: string = 'Recently'): string => {
@@ -35,6 +35,7 @@ export const TripDetailsPage: React.FC = () => {
   const { currentTrip, places, setCurrentTrip, setPlaces, setLoading } = useTripsStore()
   const [showCreatePlaceForm, setShowCreatePlaceForm] = useState(false)
   const [showEditTripForm, setShowEditTripForm] = useState(false)
+  const [editingPlace, setEditingPlace] = useState<Place | null>(null)
 
   useEffect(() => {
     if (id && user) {
@@ -61,7 +62,7 @@ export const TripDetailsPage: React.FC = () => {
     if (!id || !user) return
     
     setLoading(true)
-    const trip = await tripsService.getTrip(id, user.email)
+    const trip = await tripsService.getTrip(id, user.email, user.uid)
     if (trip) {
       // Check if user has access to this trip
       if (!canAccessTrip(user, trip)) {
@@ -98,21 +99,19 @@ export const TripDetailsPage: React.FC = () => {
 
   const handleDeletePlace = async (placeId: string) => {
     if (!user || !currentTrip) return
-    
-    // Check permissions
-    if (currentTrip.ownerId !== user.uid) {
-      alert('You can only delete places from your own trips')
-      return
-    }
 
     if (confirm('Are you sure you want to delete this place?')) {
-      const success = await tripsService.deletePlace(placeId, user.uid)
+      const success = await tripsService.deletePlace(placeId, user.uid, user.email)
       if (success) {
         setPlaces(places.filter(p => p.id !== placeId))
       } else {
         alert('Failed to delete place')
       }
     }
+  }
+
+  const handleEditPlace = (place: Place) => {
+    setEditingPlace(place)
   }
 
   if (!currentTrip) {
@@ -140,9 +139,14 @@ export const TripDetailsPage: React.FC = () => {
   // Debug logging
   console.log('TripDetailsPage Debug:', {
     user: user ? { uid: user.uid, email: user.email, role: user.role } : null,
-    currentTrip: currentTrip ? { id: currentTrip.id, ownerId: currentTrip.ownerId, title: currentTrip.title } : null,
+    currentTrip: currentTrip ? { id: currentTrip.id, ownerId: currentTrip.ownerId, title: currentTrip.title, userRole: currentTrip.userRole } : null,
     userRole,
+    canEditTrip,
+    canDeleteTrip,
     canManageAccess,
+    canAddPlace,
+    canEditPlace,
+    canDeletePlace,
     isOwner: currentTrip && user ? currentTrip.ownerId === user.uid : false
   })
 
@@ -258,6 +262,17 @@ export const TripDetailsPage: React.FC = () => {
         />
       )}
 
+      {editingPlace && (
+        <EditPlaceForm
+          place={editingPlace}
+          onClose={() => setEditingPlace(null)}
+          onSuccess={() => {
+            setEditingPlace(null)
+            loadTripDetails()
+          }}
+        />
+      )}
+
       <div className="space-y-4">
         {sortedPlaces.map((place) => (
           <Card key={place.id}>
@@ -276,7 +291,11 @@ export const TripDetailsPage: React.FC = () => {
                 </div>
                 <div className="flex items-center space-x-2">
                   {canEditPlace && (
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleEditPlace(place)}
+                    >
                       <Edit className="h-4 w-4" />
                     </Button>
                   )}
@@ -324,11 +343,22 @@ interface CreatePlaceFormProps {
 
 const CreatePlaceForm: React.FC<CreatePlaceFormProps> = ({ tripId, onClose, onSuccess }) => {
   const { user } = useAuth()
+  const { places } = useTripsStore()
   const [locationName, setLocationName] = useState('')
   const [notes, setNotes] = useState('')
   const [dayNumber, setDayNumber] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Auto-calculate next day number
+  useEffect(() => {
+    if (places.length > 0) {
+      const maxDayNumber = Math.max(...places.map(p => p.dayNumber))
+      setDayNumber(maxDayNumber + 1)
+    } else {
+      setDayNumber(1)
+    }
+  }, [places])
 
   // Early return if user is not authenticated
   if (!user) {
@@ -358,7 +388,7 @@ const CreatePlaceForm: React.FC<CreatePlaceFormProps> = ({ tripId, onClose, onSu
       placeData.notes = notes
     }
 
-    const placeId = await tripsService.createPlace(placeData)
+    const placeId = await tripsService.createPlace(placeData, user.uid, user.email)
     
     if (placeId) {
       onSuccess()
@@ -587,6 +617,120 @@ const EditTripForm: React.FC<EditTripFormProps> = ({ trip, onClose, onSuccess })
             </Button>
             <Button type="submit" disabled={isLoading || !isFormValid}>
               {isLoading ? 'Updating...' : 'Update Trip'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Edit Place Form Component
+interface EditPlaceFormProps {
+  place: Place
+  onClose: () => void
+  onSuccess: () => void
+}
+
+const EditPlaceForm: React.FC<EditPlaceFormProps> = ({ place, onClose, onSuccess }) => {
+  const { user } = useAuth()
+  const [locationName, setLocationName] = useState(place.locationName)
+  const [notes, setNotes] = useState(place.notes || '')
+  const [dayNumber, setDayNumber] = useState(place.dayNumber)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  // Early return if user is not authenticated
+  if (!user) {
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardContent className="p-6 text-center">
+          <p className="text-destructive">You must be logged in to edit a place.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError('')
+
+    // Створюємо об'єкт без undefined значень
+    const updates: any = {
+      locationName,
+      dayNumber
+    }
+
+    // Додаємо notes тільки якщо вони не пусті
+    if (notes.trim()) {
+      updates.notes = notes
+    }
+
+    const success = await tripsService.updatePlace(place.id, updates, user.uid, user.email)
+    
+    if (success) {
+      onSuccess()
+    } else {
+      setError('Failed to update place')
+    }
+    
+    setIsLoading(false)
+  }
+
+  return (
+    <Card className="max-w-2xl mx-auto">
+      <CardHeader>
+        <CardTitle>Edit Place</CardTitle>
+        <CardDescription>
+          Update place information
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Location Name *</label>
+            <Input
+              value={locationName}
+              onChange={(e) => setLocationName(e.target.value)}
+              placeholder="Enter location name"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Day Number *</label>
+            <Input
+              type="number"
+              min="1"
+              value={dayNumber}
+              onChange={(e) => setDayNumber(parseInt(e.target.value))}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add notes about this place"
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            />
+          </div>
+
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end space-x-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? 'Updating...' : 'Update Place'}
             </Button>
           </div>
         </form>
