@@ -73,12 +73,28 @@ export const tripsService = {
     }
   },
 
-  async getTrip(tripId: string): Promise<Trip | null> {
+  async getTrip(tripId: string, userEmail?: string): Promise<Trip | null> {
     try {
       const docRef = doc(db, 'trips', tripId)
       const docSnap = await getDoc(docRef)
       if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as Trip
+        const tripData = { id: docSnap.id, ...docSnap.data() } as Trip
+        
+        // If userEmail is provided, check if user is a collaborator
+        if (userEmail) {
+          const accessQuery = query(
+            collection(db, 'tripAccess'),
+            where('tripId', '==', tripId),
+            where('email', '==', userEmail),
+            where('status', '==', 'accepted')
+          )
+          const accessSnapshot = await getDocs(accessQuery)
+          if (!accessSnapshot.empty) {
+            tripData.userRole = 'Collaborator'
+          }
+        }
+        
+        return tripData
       }
       return null
     } catch (error) {

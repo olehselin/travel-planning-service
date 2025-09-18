@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,6 +30,7 @@ const safeFormatDate = (dateString: string | undefined, fallback: string = 'Rece
 export const TripDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const { currentTrip, places, setCurrentTrip, setPlaces, setLoading } = useTripsStore()
   const [showCreatePlaceForm, setShowCreatePlaceForm] = useState(false)
@@ -41,11 +42,26 @@ export const TripDetailsPage: React.FC = () => {
     }
   }, [id, user])
 
+  // Auto-open edit form if edit=true in URL
+  useEffect(() => {
+    if (searchParams.get('edit') === 'true' && currentTrip && user) {
+      // Check if user can edit this trip
+      const userRole = getUserRoleInTrip(user, currentTrip)
+      if (userRole === 'Owner') {
+        setShowEditTripForm(true)
+        // Remove the edit parameter from URL
+        const newSearchParams = new URLSearchParams(searchParams)
+        newSearchParams.delete('edit')
+        navigate(`/trips/${id}${newSearchParams.toString() ? `?${newSearchParams.toString()}` : ''}`, { replace: true })
+      }
+    }
+  }, [searchParams, currentTrip, user, id, navigate])
+
   const loadTripDetails = async () => {
     if (!id || !user) return
     
     setLoading(true)
-    const trip = await tripsService.getTrip(id)
+    const trip = await tripsService.getTrip(id, user.email)
     if (trip) {
       // Check if user has access to this trip
       if (!canAccessTrip(user, trip)) {

@@ -87,8 +87,8 @@ export const TripsPage: React.FC = () => {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredTrips.map((trip) => (
-          <Card key={trip.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader>
+          <Card key={trip.id} className="hover:shadow-lg transition-shadow flex flex-col">
+            <CardHeader className="flex-shrink-0">
               <CardTitle className="flex items-center justify-between">
                 <span className="truncate">{trip.title}</span>
                 <div className="flex items-center space-x-2">
@@ -104,13 +104,17 @@ export const TripsPage: React.FC = () => {
                   <MapPin className="h-5 w-5 text-muted-foreground" />
                 </div>
               </CardTitle>
-              {trip.description && (
-                <CardDescription className="line-clamp-2">
-                  {trip.description}
-                </CardDescription>
-              )}
+              <div className="min-h-[1.5rem]">
+                {trip.description ? (
+                  <CardDescription className="line-clamp-2">
+                    {trip.description}
+                  </CardDescription>
+                ) : (
+                  <div className="h-6"></div>
+                )}
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-between">
               <div className="space-y-2">
                 {trip.startDate && (
                   <div className="flex items-center text-sm text-muted-foreground">
@@ -124,13 +128,20 @@ export const TripsPage: React.FC = () => {
                     )}
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-2">
-                  <span className="text-xs text-muted-foreground">
-                    Created {safeFormatDate(trip.createdAt)}
-                  </span>
-                  <Button asChild size="sm">
+              </div>
+              <div className="flex justify-between items-center pt-4 mt-auto">
+                <span className="text-xs text-muted-foreground">
+                  Created {safeFormatDate(trip.createdAt)}
+                </span>
+                <div className="flex space-x-2">
+                  <Button asChild size="sm" variant="outline">
                     <Link to={`/trips/${trip.id}`}>View Details</Link>
                   </Button>
+                  {trip.userRole === 'Owner' && (
+                    <Button asChild size="sm">
+                      <Link to={`/trips/${trip.id}?edit=true`}>Edit</Link>
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -322,3 +333,4 @@ const CreateTripForm: React.FC<CreateTripFormProps> = ({ onClose, onSuccess }) =
     </Card>
   )
 }
+
