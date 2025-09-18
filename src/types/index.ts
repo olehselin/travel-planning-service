@@ -51,3 +51,6 @@ export interface Invite {
 }
 
 export type TripAccessStatus = 'pending' | 'accepted' | 'declined'
+
+// Re-export form types
+export * from './forms'
