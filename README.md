@@ -168,6 +168,16 @@ service cloud.firestore {
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 
+## Routes
+
+- `/` - Home page (redirects to trips)
+- `/login` - User login
+- `/register` - User registration
+- `/trips` - List of user's trips
+- `/trips/:id` - Trip details and places
+- `/trips/:id/access` - Manage trip access (Owner only)
+- `/accept-invite/:token` - Accept invitation by token
+
 ## Features Implemented
 
 ### ✅ Core Features
@@ -179,12 +189,14 @@ service cloud.firestore {
 - [x] Responsive design
 
 ### ✅ Collaboration Features
-- [x] Invite system (UI only - email sending not implemented)
+- [x] Complete invite system with email simulation
 - [x] Role-based access control
 - [x] Access management interface
-
-### 🔄 Future Enhancements
-- [ ] Email invitation system
+- [x] Invite acceptance page with token validation
+- [x] Email invitation system (simulated)
+- [x] Invite expiration (24 hours)
+- [x] Duplicate invite prevention
+- [x] Self-invite prevention
 - [ ] Real-time collaboration
 - [ ] Trip sharing via public links
 - [ ] Advanced search and filtering

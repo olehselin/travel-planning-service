@@ -5,6 +5,9 @@ export interface User {
   role: 'User' | 'Owner' | 'Collaborator'
 }
 
+export type UserRole = 'User' | 'Owner' | 'Collaborator'
+export type TripUserRole = 'Owner' | 'Collaborator'
+
 export interface Trip {
   id: string
   title: string
@@ -14,6 +17,7 @@ export interface Trip {
   ownerId: string
   createdAt: string
   updatedAt: string
+  userRole?: TripUserRole
 }
 
 export interface Place {
@@ -46,5 +50,4 @@ export interface Invite {
   createdAt: string
 }
 
-export type UserRole = 'User' | 'Owner' | 'Collaborator'
 export type TripAccessStatus = 'pending' | 'accepted' | 'declined'

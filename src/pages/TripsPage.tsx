@@ -6,8 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuth } from '@/contexts/AuthContext'
 import { useTripsStore } from '@/stores/tripsStore'
 import { tripsService } from '@/services/tripsService'
+import { hasPermission } from '@/lib/permissions'
 import { Plus, Search, Calendar, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
+
+// Допоміжна функція для безпечного форматування дат
+const safeFormatDate = (dateString: string | undefined, fallback: string = 'Recently'): string => {
+  if (!dateString) return fallback
+  const date = new Date(dateString)
+  if (date.toString() === 'Invalid Date') return fallback
+  return format(date, 'MMM dd, yyyy')
+}
 
 export const TripsPage: React.FC = () => {
   const { user } = useAuth()
@@ -25,7 +34,7 @@ export const TripsPage: React.FC = () => {
     if (!user) return
     
     setLoading(true)
-    const userTrips = await tripsService.getTrips(user.uid)
+    const userTrips = await tripsService.getTrips(user.uid, user.email)
     setTrips(userTrips)
     setLoading(false)
   }
@@ -33,6 +42,9 @@ export const TripsPage: React.FC = () => {
   const filteredTrips = trips.filter(trip =>
     trip.title.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  // Check if user can create trips
+  const canCreateTrip = user ? hasPermission('trip.create', { user }) : false
 
   return (
     <div className="space-y-6">
@@ -43,10 +55,12 @@ export const TripsPage: React.FC = () => {
             Manage and organize your travel plans
           </p>
         </div>
-        <Button onClick={() => setShowCreateForm(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Trip
-        </Button>
+        {canCreateTrip && (
+          <Button onClick={() => setShowCreateForm(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Trip
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center space-x-2">
@@ -77,7 +91,18 @@ export const TripsPage: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span className="truncate">{trip.title}</span>
-                <MapPin className="h-5 w-5 text-muted-foreground" />
+                <div className="flex items-center space-x-2">
+                  {trip.userRole && (
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      trip.userRole === 'Owner' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {trip.userRole}
+                    </span>
+                  )}
+                  <MapPin className="h-5 w-5 text-muted-foreground" />
+                </div>
               </CardTitle>
               {trip.description && (
                 <CardDescription className="line-clamp-2">
@@ -90,18 +115,18 @@ export const TripsPage: React.FC = () => {
                 {trip.startDate && (
                   <div className="flex items-center text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4 mr-2" />
-                    {format(new Date(trip.startDate), 'MMM dd, yyyy')}
+                    {safeFormatDate(trip.startDate)}
                     {trip.endDate && (
                       <>
                         <span className="mx-2">-</span>
-                        {format(new Date(trip.endDate), 'MMM dd, yyyy')}
+                        {safeFormatDate(trip.endDate)}
                       </>
                     )}
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2">
                   <span className="text-xs text-muted-foreground">
-                    Created {format(new Date(trip.createdAt), 'MMM dd, yyyy')}
+                    Created {safeFormatDate(trip.createdAt)}
                   </span>
                   <Button asChild size="sm">
                     <Link to={`/trips/${trip.id}`}>View Details</Link>
@@ -120,7 +145,7 @@ export const TripsPage: React.FC = () => {
           <p className="text-muted-foreground mb-4">
             {searchTerm ? 'Try adjusting your search terms' : 'Start planning your first trip'}
           </p>
-          {!searchTerm && (
+          {!searchTerm && canCreateTrip && (
             <Button onClick={() => setShowCreateForm(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Create Your First Trip
@@ -146,26 +171,64 @@ const CreateTripForm: React.FC<CreateTripFormProps> = ({ onClose, onSuccess }) =
   const [endDate, setEndDate] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [dateError, setDateError] = useState('')
+
+  // Early return if user is not authenticated
+  if (!user) {
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardContent className="p-6 text-center">
+          <p className="text-destructive">You must be logged in to create a trip.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Validate dates in real-time
+  const validateDates = () => {
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      setDateError('Дата початку повинна бути не пізніше дати завершення')
+      return false
+    }
+    setDateError('')
+    return true
+  }
+
+  // Check if form is valid (without side effects)
+  const isFormValid = title.trim() && (startDate && endDate ? new Date(startDate) <= new Date(endDate) : true)
+
+  // Validate dates when they change
+  useEffect(() => {
+    validateDates()
+  }, [startDate, endDate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
 
-    // Validate dates
-    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      setError('Start date must be before or equal to end date')
+    if (!isFormValid) {
+      setError('Будь ласка, виправте помилки в формі')
       return
     }
 
     setIsLoading(true)
     setError('')
 
-    const tripData = {
+    // Створюємо об'єкт без undefined значень
+    const tripData: any = {
       title,
-      description: description || undefined,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
       ownerId: user.uid
+    }
+
+    // Додаємо поля тільки якщо вони не пусті
+    if (description.trim()) {
+      tripData.description = description
+    }
+    if (startDate) {
+      tripData.startDate = startDate
+    }
+    if (endDate) {
+      tripData.endDate = endDate
     }
 
     const tripId = await tripsService.createTrip(tripData)
@@ -215,7 +278,10 @@ const CreateTripForm: React.FC<CreateTripFormProps> = ({ onClose, onSuccess }) =
               <Input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value)
+                  validateDates()
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -223,10 +289,19 @@ const CreateTripForm: React.FC<CreateTripFormProps> = ({ onClose, onSuccess }) =
               <Input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setEndDate(e.target.value)
+                  validateDates()
+                }}
               />
             </div>
           </div>
+
+          {dateError && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {dateError}
+            </div>
+          )}
 
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
@@ -238,7 +313,7 @@ const CreateTripForm: React.FC<CreateTripFormProps> = ({ onClose, onSuccess }) =
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || !isFormValid}>
               {isLoading ? 'Creating...' : 'Create Trip'}
             </Button>
           </div>

@@ -20,6 +20,7 @@ interface TripsState {
   removePlace: (placeId: string) => void
   addTripAccess: (access: TripAccess) => void
   updateTripAccess: (access: TripAccess) => void
+  clearState: () => void
 }
 
 export const useTripsStore = create<TripsState>((set) => ({
@@ -53,4 +54,11 @@ export const useTripsStore = create<TripsState>((set) => ({
   updateTripAccess: (access) => set((state) => ({
     tripAccess: state.tripAccess.map(a => a.id === access.id ? access : a)
   })),
+  clearState: () => set({
+    trips: [],
+    currentTrip: null,
+    places: [],
+    tripAccess: [],
+    isLoading: false
+  }),
 }))

@@ -2,35 +2,44 @@ import { Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Layout } from './components/Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { TripsPage } from './pages/TripsPage'
 import { TripDetailsPage } from './pages/TripDetailsPage'
 import { TripAccessPage } from './pages/TripAccessPage'
+import { AcceptInvitePage } from './pages/AcceptInvitePage'
+import { EmailSetupPage } from './pages/EmailSetupPage'
 
 function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<TripsPage />} />
-                  <Route path="/trips" element={<TripsPage />} />
-                  <Route path="/trips/:id" element={<TripDetailsPage />} />
-                  <Route path="/trips/:id/access" element={<TripAccessPage />} />
-                </Routes>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <ErrorBoundary>
+                    <Routes>
+                      <Route path="/" element={<TripsPage />} />
+                      <Route path="/trips" element={<TripsPage />} />
+                      <Route path="/trips/:id" element={<TripDetailsPage />} />
+                      <Route path="/trips/:id/access" element={<TripAccessPage />} />
+                      <Route path="/email-setup" element={<EmailSetupPage />} />
+                    </Routes>
+                  </ErrorBoundary>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

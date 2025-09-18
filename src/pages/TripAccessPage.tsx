@@ -16,7 +16,6 @@ import {
   XCircle 
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { TripAccess } from '@/types'
 
 export const TripAccessPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -62,38 +61,52 @@ export const TripAccessPage: React.FC = () => {
       return
     }
 
-    // Check if already invited
-    const existingInvite = tripAccess.find(access => 
-      access.email === email && access.status === 'pending'
-    )
-    if (existingInvite) {
-      setError('This user has already been invited to this trip')
-      return
+    setIsLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const result = await tripsService.sendInvite(id, email, user.uid)
+      
+      if (result.success) {
+        setEmail('')
+        setSuccess(result.message)
+        // Reload trip access to show the new invitation
+        await loadTripAndAccess()
+      } else {
+        setError(result.message)
+      }
+    } catch (error) {
+      console.error('Error sending invite:', error)
+      setError('Failed to send invitation. Please try again.')
     }
+
+    setIsLoading(false)
+  }
+
+  const handleReinvite = async (email: string) => {
+    if (!id || !user || !currentTrip) return
 
     setIsLoading(true)
     setError('')
     setSuccess('')
 
-    // For now, we'll simulate the invite process
-    // In a real app, this would send an email and create an invite record
-    const newAccess: TripAccess = {
-      id: `temp-${Date.now()}`,
-      tripId: id,
-      email,
-      role: 'Collaborator',
-      status: 'pending',
-      invitedBy: user.uid,
-      invitedAt: new Date().toISOString()
+    try {
+      const result = await tripsService.sendInvite(id, email, user.uid)
+      
+      if (result.success) {
+        setSuccess(result.message)
+        // Reload trip access to show the updated invitation
+        await loadTripAndAccess()
+      } else {
+        setError(result.message)
+      }
+    } catch (error) {
+      console.error('Error resending invite:', error)
+      setError('Failed to resend invitation. Please try again.')
     }
 
-    // Simulate API call
-    setTimeout(() => {
-      setTripAccess([...tripAccess, newAccess])
-      setEmail('')
-      setSuccess(`Invitation sent to ${email}`)
-      setIsLoading(false)
-    }, 1000)
+    setIsLoading(false)
   }
 
   const handleRevokeAccess = async (accessId: string) => {
@@ -105,8 +118,35 @@ export const TripAccessPage: React.FC = () => {
     }
 
     if (confirm('Are you sure you want to revoke access for this user?')) {
-      setTripAccess(tripAccess.filter(access => access.id !== accessId))
-      setSuccess('Access revoked successfully')
+      setIsLoading(true)
+      setError('')
+      setSuccess('')
+
+      try {
+        // Find the access record to get the email
+        const accessRecord = tripAccess.find(access => access.id === accessId)
+        if (!accessRecord) {
+          setError('Access record not found')
+          setIsLoading(false)
+          return
+        }
+
+        // Delete from database
+        const success = await tripsService.deleteTripAccess(accessId)
+        
+        if (success) {
+          // Update local state
+          setTripAccess(tripAccess.filter(access => access.id !== accessId))
+          setSuccess('Access revoked successfully')
+        } else {
+          setError('Failed to revoke access')
+        }
+      } catch (error) {
+        console.error('Error revoking access:', error)
+        setError('Failed to revoke access')
+      }
+
+      setIsLoading(false)
     }
   }
 
@@ -266,6 +306,15 @@ export const TripAccessPage: React.FC = () => {
                     <span className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm">
                       {access.role}
                     </span>
+                    {access.status === 'pending' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReinvite(access.email)}
+                      >
+                        Resend
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -291,6 +340,7 @@ export const TripAccessPage: React.FC = () => {
           <p>• Only trip owners can invite new collaborators or delete the trip</p>
           <p>• Invitations are sent via email with a secure link</p>
           <p>• You can revoke access at any time</p>
+          <p>• <strong>Note:</strong> Emails are sent via Firebase Cloud Functions</p>
         </CardContent>
       </Card>
     </div>

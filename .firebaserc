@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "travel-planning-service-front"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

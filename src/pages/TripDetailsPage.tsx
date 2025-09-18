@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuth } from '@/contexts/AuthContext'
 import { useTripsStore } from '@/stores/tripsStore'
 import { tripsService } from '@/services/tripsService'
+import { hasPermission, getUserRoleInTrip, canAccessTrip } from '@/lib/permissions'
 import { 
   ArrowLeft, 
   Plus, 
@@ -13,11 +14,18 @@ import {
   Trash2, 
   Calendar, 
   MapPin, 
-  Users,
-  Settings
+  Users
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { Trip, Place } from '@/types'
+import { Trip, TripUserRole } from '@/types'
+
+// Допоміжна функція для безпечного форматування дат
+const safeFormatDate = (dateString: string | undefined, fallback: string = 'Recently'): string => {
+  if (!dateString) return fallback
+  const date = new Date(dateString)
+  if (date.toString() === 'Invalid Date') return fallback
+  return format(date, 'MMMM dd, yyyy')
+}
 
 export const TripDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -28,17 +36,23 @@ export const TripDetailsPage: React.FC = () => {
   const [showEditTripForm, setShowEditTripForm] = useState(false)
 
   useEffect(() => {
-    if (id) {
+    if (id && user) {
       loadTripDetails()
     }
-  }, [id])
+  }, [id, user])
 
   const loadTripDetails = async () => {
-    if (!id) return
+    if (!id || !user) return
     
     setLoading(true)
     const trip = await tripsService.getTrip(id)
     if (trip) {
+      // Check if user has access to this trip
+      if (!canAccessTrip(user, trip)) {
+        navigate('/trips')
+        return
+      }
+      
       setCurrentTrip(trip)
       const tripPlaces = await tripsService.getPlaces(id)
       setPlaces(tripPlaces)
@@ -57,7 +71,7 @@ export const TripDetailsPage: React.FC = () => {
     }
 
     if (confirm('Are you sure you want to delete this trip? This action cannot be undone.')) {
-      const success = await tripsService.deleteTrip(id)
+      const success = await tripsService.deleteTrip(id, user.uid)
       if (success) {
         navigate('/trips')
       } else {
@@ -76,7 +90,7 @@ export const TripDetailsPage: React.FC = () => {
     }
 
     if (confirm('Are you sure you want to delete this place?')) {
-      const success = await tripsService.deletePlace(placeId)
+      const success = await tripsService.deletePlace(placeId, user.uid)
       if (success) {
         setPlaces(places.filter(p => p.id !== placeId))
       } else {
@@ -96,8 +110,25 @@ export const TripDetailsPage: React.FC = () => {
     )
   }
 
-  const isOwner = currentTrip.ownerId === user?.uid
+  const userRole: TripUserRole | undefined = user ? getUserRoleInTrip(user, currentTrip) : undefined
   const sortedPlaces = [...places].sort((a, b) => a.dayNumber - b.dayNumber)
+
+  // Permission checks
+  const canEditTrip = user ? hasPermission('trip.update', { user, trip: currentTrip, userRole }) : false
+  const canDeleteTrip = user ? hasPermission('trip.delete', { user, trip: currentTrip, userRole }) : false
+  const canManageAccess = user ? hasPermission('trip.invite', { user, trip: currentTrip, userRole }) : false
+  const canAddPlace = user ? hasPermission('place.create', { user, trip: currentTrip, userRole }) : false
+  const canEditPlace = user ? hasPermission('place.update', { user, trip: currentTrip, userRole }) : false
+  const canDeletePlace = user ? hasPermission('place.delete', { user, trip: currentTrip, userRole }) : false
+
+  // Debug logging
+  console.log('TripDetailsPage Debug:', {
+    user: user ? { uid: user.uid, email: user.email, role: user.role } : null,
+    currentTrip: currentTrip ? { id: currentTrip.id, ownerId: currentTrip.ownerId, title: currentTrip.title } : null,
+    userRole,
+    canManageAccess,
+    isOwner: currentTrip && user ? currentTrip.ownerId === user.uid : false
+  })
 
   return (
     <div className="space-y-6">
@@ -118,23 +149,25 @@ export const TripDetailsPage: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-2">
-          {isOwner && (
-            <>
-              <Button variant="outline" size="sm" asChild>
-                <Link to={`/trips/${id}/access`}>
-                  <Users className="h-4 w-4 mr-2" />
-                  Manage Access
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowEditTripForm(true)}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Trip
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteTrip}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-            </>
+          {(canManageAccess || (currentTrip && user && currentTrip.ownerId === user.uid)) && (
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/trips/${id}/access`}>
+                <Users className="h-4 w-4 mr-2" />
+                Manage Access
+              </Link>
+            </Button>
+          )}
+          {canEditTrip && (
+            <Button variant="outline" size="sm" onClick={() => setShowEditTripForm(true)}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Trip
+            </Button>
+          )}
+          {canDeleteTrip && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteTrip}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
           )}
         </div>
       </div>
@@ -152,18 +185,18 @@ export const TripDetailsPage: React.FC = () => {
             {currentTrip.startDate && (
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Start Date</label>
-                <p className="text-lg">{format(new Date(currentTrip.startDate), 'MMMM dd, yyyy')}</p>
+                <p className="text-lg">{safeFormatDate(currentTrip.startDate)}</p>
               </div>
             )}
             {currentTrip.endDate && (
               <div>
                 <label className="text-sm font-medium text-muted-foreground">End Date</label>
-                <p className="text-lg">{format(new Date(currentTrip.endDate), 'MMMM dd, yyyy')}</p>
+                <p className="text-lg">{safeFormatDate(currentTrip.endDate)}</p>
               </div>
             )}
             <div>
               <label className="text-sm font-medium text-muted-foreground">Created</label>
-              <p className="text-lg">{format(new Date(currentTrip.createdAt), 'MMMM dd, yyyy')}</p>
+              <p className="text-lg">{safeFormatDate(currentTrip.createdAt)}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-muted-foreground">Places</label>
@@ -179,7 +212,7 @@ export const TripDetailsPage: React.FC = () => {
           <MapPin className="h-6 w-6 mr-2" />
           Places ({places.length})
         </h2>
-        {(isOwner || true) && ( // For now, allow all users to add places
+        {canAddPlace && (
           <Button onClick={() => setShowCreatePlaceForm(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Place
@@ -226,19 +259,19 @@ export const TripDetailsPage: React.FC = () => {
                   )}
                 </div>
                 <div className="flex items-center space-x-2">
-                  {(isOwner || true) && ( // For now, allow all users to edit places
-                    <>
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={() => handleDeletePlace(place.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </>
+                  {canEditPlace && (
+                    <Button variant="outline" size="sm">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {canDeletePlace && (
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      onClick={() => handleDeletePlace(place.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
               </div>
@@ -274,22 +307,39 @@ interface CreatePlaceFormProps {
 }
 
 const CreatePlaceForm: React.FC<CreatePlaceFormProps> = ({ tripId, onClose, onSuccess }) => {
+  const { user } = useAuth()
   const [locationName, setLocationName] = useState('')
   const [notes, setNotes] = useState('')
   const [dayNumber, setDayNumber] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Early return if user is not authenticated
+  if (!user) {
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardContent className="p-6 text-center">
+          <p className="text-destructive">You must be logged in to add a place.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
 
-    const placeData = {
+    // Створюємо об'єкт без undefined значень
+    const placeData: any = {
       tripId,
       locationName,
-      notes: notes || undefined,
       dayNumber
+    }
+
+    // Додаємо notes тільки якщо вони не пусті
+    if (notes.trim()) {
+      placeData.notes = notes
     }
 
     const placeId = await tripsService.createPlace(placeData)
@@ -372,33 +422,72 @@ interface EditTripFormProps {
 }
 
 const EditTripForm: React.FC<EditTripFormProps> = ({ trip, onClose, onSuccess }) => {
+  const { user } = useAuth()
   const [title, setTitle] = useState(trip.title)
   const [description, setDescription] = useState(trip.description || '')
   const [startDate, setStartDate] = useState(trip.startDate || '')
   const [endDate, setEndDate] = useState(trip.endDate || '')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [dateError, setDateError] = useState('')
+
+  // Early return if user is not authenticated
+  if (!user) {
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardContent className="p-6 text-center">
+          <p className="text-destructive">You must be logged in to edit a trip.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Validate dates in real-time
+  const validateDates = () => {
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      setDateError('Дата початку повинна бути не пізніше дати завершення')
+      return false
+    }
+    setDateError('')
+    return true
+  }
+
+  // Check if form is valid (without side effects)
+  const isFormValid = title.trim() && (startDate && endDate ? new Date(startDate) <= new Date(endDate) : true)
+
+  // Validate dates when they change
+  useEffect(() => {
+    validateDates()
+  }, [startDate, endDate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate dates
-    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      setError('Start date must be before or equal to end date')
+    if (!isFormValid) {
+      setError('Будь ласка, виправте помилки в формі')
       return
     }
 
     setIsLoading(true)
     setError('')
 
-    const updates = {
-      title,
-      description: description || undefined,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined
+    // Створюємо об'єкт без undefined значень
+    const updates: any = {
+      title
     }
 
-    const success = await tripsService.updateTrip(trip.id, updates)
+    // Додаємо поля тільки якщо вони не пусті
+    if (description.trim()) {
+      updates.description = description
+    }
+    if (startDate) {
+      updates.startDate = startDate
+    }
+    if (endDate) {
+      updates.endDate = endDate
+    }
+
+    const success = await tripsService.updateTrip(trip.id, updates, user?.uid || '')
     
     if (success) {
       onSuccess()
@@ -445,7 +534,10 @@ const EditTripForm: React.FC<EditTripFormProps> = ({ trip, onClose, onSuccess })
               <Input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value)
+                  validateDates()
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -453,10 +545,19 @@ const EditTripForm: React.FC<EditTripFormProps> = ({ trip, onClose, onSuccess })
               <Input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setEndDate(e.target.value)
+                  validateDates()
+                }}
               />
             </div>
           </div>
+
+          {dateError && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {dateError}
+            </div>
+          )}
 
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
@@ -468,7 +569,7 @@ const EditTripForm: React.FC<EditTripFormProps> = ({ trip, onClose, onSuccess })
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || !isFormValid}>
               {isLoading ? 'Updating...' : 'Update Trip'}
             </Button>
           </div>
