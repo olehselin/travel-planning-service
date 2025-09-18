@@ -63,7 +63,7 @@ const FormActions: React.FC<{
 }
 
 export const CreateTripForm: React.FC<CreateTripFormProps> = ({ onClose, onSuccess }) => {
-  const { formData, errors, isLoading, handleSubmit, updateField, validateForm } = useTripForm(onSuccess)
+  const { formData, errors, isLoading, handleSubmit, updateField, isFormValid } = useTripForm(onSuccess)
 
   return (
     <Card className="max-w-2xl mx-auto">
@@ -127,7 +127,7 @@ export const CreateTripForm: React.FC<CreateTripFormProps> = ({ onClose, onSucce
             onSubmit={handleSubmit}
             isLoading={isLoading}
             submitText="Create Trip"
-            isValid={validateForm()}
+            isValid={isFormValid}
           />
         </form>
       </CardContent>

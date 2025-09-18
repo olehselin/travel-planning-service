@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { tripsService } from '@/services/tripsService'
 import { TripFormData, FormErrors } from '@/types/forms'
@@ -32,6 +32,14 @@ export const useTripForm = (onSuccess: () => void) => {
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }, [formData])
+
+  // Use useMemo to calculate form validity without side effects
+  const isFormValid = useMemo(() => {
+    if (!validateRequired(formData.title)) return false
+    if (!validateTripTitle(formData.title)) return false
+    if (formData.startDate && formData.endDate && !validateDateRange(formData.startDate, formData.endDate)) return false
+    return true
+  }, [formData.title, formData.startDate, formData.endDate])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -77,6 +85,7 @@ export const useTripForm = (onSuccess: () => void) => {
     isLoading,
     handleSubmit,
     updateField,
-    validateForm
+    validateForm,
+    isFormValid
   }
 }

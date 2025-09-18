@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTripsStore } from '@/stores/tripsStore'
 import { tripsService } from '@/services/tripsService'
@@ -40,6 +40,13 @@ export const usePlaceForm = (tripId: string, place?: Place) => {
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }, [formData])
+
+  // Use useMemo to calculate form validity without side effects
+  const isFormValid = useMemo(() => {
+    if (!validateRequired(formData.locationName)) return false
+    if (formData.dayNumber < 1) return false
+    return true
+  }, [formData.locationName, formData.dayNumber])
 
   const handleSubmit = useCallback(async () => {
     if (!user || !validateForm()) return
@@ -93,6 +100,7 @@ export const usePlaceForm = (tripId: string, place?: Place) => {
     isLoading,
     handleSubmit,
     updateField,
-    validateForm
+    validateForm,
+    isFormValid
   }
 }
