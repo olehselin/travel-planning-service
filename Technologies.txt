@@ -1,0 +1,5 @@
+1. React
+2. TypeScript
+3. Store: Zustand
+4. Auth + Storage: Firebase
+5. Component Library: Shadcn
