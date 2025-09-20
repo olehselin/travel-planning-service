@@ -1,34 +1,32 @@
-import React, { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { useAuth } from '@/contexts/AuthContext'
-import { hasPermission } from '@/lib/permissions'
-import { useTrips } from '@/hooks/useTrips'
-import { filterTrips } from '@/lib/utils/searchUtils'
-import { TripCard } from '@/components/trips/TripCard'
-import { CreateTripForm } from '@/components/trips/CreateTripForm'
-import { TripSearch } from '@/components/trips/TripSearch'
-import { EmptyState } from '@/components/trips/EmptyState'
-import { Plus } from 'lucide-react'
+import React, { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasPermission } from "@/lib/permissions";
+import { useTrips } from "@/hooks/useTrips";
+import { filterTrips } from "@/lib/utils/searchUtils";
+import { TripCard } from "@/components/trips/TripCard";
+import { CreateTripForm } from "@/components/trips/CreateTripForm";
+import { TripSearch } from "@/components/trips/TripSearch";
+import { EmptyState } from "@/components/trips/EmptyState";
 
 export const TripsPage: React.FC = () => {
-  const { user } = useAuth()
-  const { trips, loadTrips, isLoading } = useTrips()
-  const [searchTerm, setSearchTerm] = useState('')
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  const { user } = useAuth();
+  const { trips, loadTrips, isLoading } = useTrips();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   useEffect(() => {
     if (user) {
-      loadTrips()
+      loadTrips();
     }
-  }, [user, loadTrips])
+  }, [user, loadTrips]);
 
-  const filteredTrips = filterTrips(trips, searchTerm)
-  const canCreateTrip = user ? hasPermission('trip.create', { user }) : false
+  const filteredTrips = filterTrips(trips, searchTerm);
+  const canCreateTrip = user ? hasPermission("trip.create", { user }) : false;
 
   const handleCreateSuccess = () => {
-    setShowCreateForm(false)
-    loadTrips()
-  }
+    setShowCreateForm(false);
+    loadTrips();
+  };
 
   return (
     <div className="space-y-6">
@@ -40,19 +38,11 @@ export const TripsPage: React.FC = () => {
             Manage and organize your travel plans
           </p>
         </div>
-        {canCreateTrip && (
-          <Button onClick={() => setShowCreateForm(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Trip
-          </Button>
-        )}
+        
       </div>
 
       {/* Search */}
-      <TripSearch 
-        searchTerm={searchTerm} 
-        onSearchChange={setSearchTerm} 
-      />
+      <TripSearch searchTerm={searchTerm} onSearchChange={setSearchTerm} />
 
       {/* Create Form */}
       {showCreateForm && (
@@ -71,21 +61,20 @@ export const TripsPage: React.FC = () => {
       ) : filteredTrips.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredTrips.map((trip) => (
-            <TripCard 
-              key={trip.id} 
-              trip={trip} 
-              onEdit={() => setShowCreateForm(true)} 
+            <TripCard
+              key={trip.id}
+              trip={trip}
+              onEdit={() => setShowCreateForm(true)}
             />
           ))}
         </div>
       ) : (
-        <EmptyState 
+        <EmptyState
           searchTerm={searchTerm}
           onCreateTrip={() => setShowCreateForm(true)}
           canCreateTrip={canCreateTrip}
         />
       )}
     </div>
-  )
-}
-
+  );
+};
