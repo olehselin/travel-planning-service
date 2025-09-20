@@ -9,7 +9,6 @@ import { TripsPage } from './pages/TripsPage'
 import { TripDetailsPage } from './pages/TripDetailsPage'
 import { TripAccessPage } from './pages/TripAccessPage'
 import { AcceptInvitePage } from './pages/AcceptInvitePage'
-import { EmailSetupPage } from './pages/EmailSetupPage'
 
 function App() {
   return (
@@ -30,7 +29,6 @@ function App() {
                       <Route path="/trips" element={<TripsPage />} />
                       <Route path="/trips/:id" element={<TripDetailsPage />} />
                       <Route path="/trips/:id/access" element={<TripAccessPage />} />
-                      <Route path="/email-setup" element={<EmailSetupPage />} />
                     </Routes>
                   </ErrorBoundary>
                 </Layout>

@@ -1,37 +1,37 @@
-import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { useAuth } from '@/contexts/AuthContext'
-import { authService } from '@/services/authService'
-import { useAuthStore } from '@/stores/authStore'
-import { LogOut, MapPin, Settings } from 'lucide-react'
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { authService } from "@/services/authService";
+import { useAuthStore } from "@/stores/authStore";
+import { LogOut, MapPin, Settings } from "lucide-react";
 
 interface LayoutProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user } = useAuth()
+  const { user } = useAuth();
   // const location = useLocation()
-  const navigate = useNavigate()
-  const { logout: clearAuthStore } = useAuthStore()
+  const navigate = useNavigate();
+  const { logout: clearAuthStore } = useAuthStore();
 
   const handleLogout = async () => {
     try {
-      console.log('Starting logout process')
-      await authService.logout()
-      console.log('Firebase logout successful')
-      clearAuthStore() // Очищаємо локальний стан
-      console.log('Local auth store cleared')
-      navigate('/login') // Перенаправляємо на сторінку входу
-      console.log('Navigated to login page')
+      console.log("Starting logout process");
+      await authService.logout();
+      console.log("Firebase logout successful");
+      clearAuthStore(); // Очищаємо локальний стан
+      console.log("Local auth store cleared");
+      navigate("/login"); // Перенаправляємо на сторінку входу
+      console.log("Navigated to login page");
     } catch (error) {
-      console.error('Logout error:', error)
+      console.error("Logout error:", error);
       // Навіть якщо є помилка, очищаємо локальний стан
-      clearAuthStore()
-      navigate('/login')
+      clearAuthStore();
+      navigate("/login");
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -44,14 +44,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <span className="text-xl font-bold">TravelPlanner</span>
               </Link>
             </div>
-            
+
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/email-setup">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Email Setup
-                </Link>
-              </Button>
               <span className="text-sm text-muted-foreground">
                 {user?.email}
               </span>
@@ -68,5 +62,5 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </main>
     </div>
-  )
-}
+  );
+};
