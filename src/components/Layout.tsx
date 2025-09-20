@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/services/authService";
 import { useAuthStore } from "@/stores/authStore";
-import { LogOut, MapPin, Settings } from "lucide-react";
+import { LogOut, MapPin } from "lucide-react";
 
 interface LayoutProps {
   children: React.ReactNode;
